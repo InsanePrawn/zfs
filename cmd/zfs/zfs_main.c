@@ -259,7 +259,8 @@ get_usage(zfs_help_t idx)
 		    "\tcreate [-Pnpsv] [-b blocksize] [-o property=value] ... "
 		    "-V <size> <volume>\n"));
 	case HELP_DESTROY:
-		return (gettext("\tdestroy [-fnpRrv] <filesystem|volume>\n"
+		return (gettext("\tdestroy [-fnpRrv] [-t <type>[,...]] "
+		    "<filesystem|volume>\n"
 		    "\tdestroy [-dnpRrv] "
 		    "<filesystem|volume>@<snap>[%<snap>][,...]\n"
 		    "\tdestroy <filesystem|volume>#<bookmark>\n"));
@@ -1441,11 +1442,12 @@ zfs_do_destroy(int argc, char **argv)
 	int err = 0;
 	int c;
 	zfs_handle_t *zhp = NULL;
-	char *at, *pound;
-	zfs_type_t type = ZFS_TYPE_DATASET;
+	char *value, *at, *pound;
+	zfs_type_t types = ZFS_TYPE_DATASET;
+	boolean_t types_specified = B_FALSE;
 
 	/* check options */
-	while ((c = getopt(argc, argv, "vpndfrR")) != -1) {
+	while ((c = getopt(argc, argv, "vpnt:dfrR")) != -1) {
 		switch (c) {
 		case 'v':
 			cb.cb_verbose = B_TRUE;
@@ -1457,9 +1459,52 @@ zfs_do_destroy(int argc, char **argv)
 		case 'n':
 			cb.cb_dryrun = B_TRUE;
 			break;
+		case 't':
+			types = 0;
+			types_specified = B_TRUE;
+
+			while (*optarg != '\0') {
+				static char *type_subopts[] = { "filesystem",
+				    "volume", "snapshot", "snap", "bookmark",
+				    "all", NULL };
+
+				switch (getsubopt(&optarg, type_subopts,
+				    &value)) {
+				case 0:
+					types |= ZFS_TYPE_FILESYSTEM;
+					break;
+				case 1:
+					types |= ZFS_TYPE_VOLUME;
+					break;
+				case 2:
+				case 3:
+					types |= ZFS_TYPE_SNAPSHOT;
+					break;
+				case 4:
+					types |= ZFS_TYPE_BOOKMARK;
+					break;
+				case 5:
+					types = ZFS_TYPE_DATASET |
+					    ZFS_TYPE_BOOKMARK;
+					break;
+				default:
+					(void) fprintf(stderr,
+					    gettext("invalid type '%s'\n"),
+					    value);
+					usage(B_FALSE);
+				}
+			}
+			break;
 		case 'd':
 			cb.cb_defer_destroy = B_TRUE;
-			type = ZFS_TYPE_SNAPSHOT;
+			if (types_specified && types != ZFS_TYPE_SNAPSHOT) {
+				(void) fprintf(stderr,
+				    gettext("-d can only be used"
+				    " with snapshots\n"));
+				usage(B_FALSE);
+			} else {
+				types = ZFS_TYPE_SNAPSHOT;
+			}
 			break;
 		case 'f':
 			cb.cb_force = B_TRUE;
@@ -1495,6 +1540,12 @@ zfs_do_destroy(int argc, char **argv)
 	at = strchr(argv[0], '@');
 	pound = strchr(argv[0], '#');
 	if (at != NULL) {
+
+		if (types_specified && !(types & ZFS_TYPE_SNAPSHOT)) {
+			(void) fprintf(stderr, gettext("Failed to destroy: "
+			    "'@' in name but other types given\n"));
+			usage(B_FALSE);
+		}
 
 		/* Build the list of snaps to destroy in cb_nvl. */
 		cb.cb_nvl = fnvlist_alloc();
@@ -1561,6 +1612,13 @@ zfs_do_destroy(int argc, char **argv)
 		int err;
 		nvlist_t *nvl;
 
+		if (types_specified && !(types & ZFS_TYPE_BOOKMARK)) {
+			(void) fprintf(stderr, gettext("Failed to destroy: "
+			    "'#' in name but other types requested\n"));
+			usage(B_FALSE);
+		}
+
+
 		if (cb.cb_dryrun) {
 			(void) fprintf(stderr,
 			    "dryrun is not supported with bookmark\n");
@@ -1606,7 +1664,7 @@ zfs_do_destroy(int argc, char **argv)
 		return (err);
 	} else {
 		/* Open the given dataset */
-		if ((zhp = zfs_open(g_zfs, argv[0], type)) == NULL)
+		if ((zhp = zfs_open(g_zfs, argv[0], types)) == NULL)
 			return (1);
 
 		cb.cb_target = zhp;
