@@ -252,8 +252,6 @@ Type=zfs
 Options=defaults${opts},zfsutil
 EOF
 
-  # Finally, create the appropriate dependency
-  ln -s "../${mountfile}" "${req_dir}"
 }
 
 # Feed each line into process_line
