@@ -136,3 +136,6 @@ ZFS_INITRD_POST_MODPROBE_SLEEP='0'
 # Optional arguments for the ZFS Event Daemon (ZED).
 # See zed(8) for more information on available options.
 #ZED_ARGS="-M"
+
+# Create systemd dependencies on all canmount=auto datasets for local-fs.target
+ZFS_SYSTEMD_REQUIRE_MOUNTS='yes'

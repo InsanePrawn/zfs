@@ -257,8 +257,10 @@ Type=zfs
 Options=defaults${opts},zfsutil
 EOF
 
-  # Finally, create the appropriate dependency
-  ln -s "../${mountfile}" "${req_dir}"
+  if [ "$ZFS_SYSTEMD_REQUIRE_MOUNTS" = "yes" ] ; then
+    # Finally, create the appropriate dependency
+    ln -s "../${mountfile}" "${req_dir}"
+  fi
 }
 
 # Feed each line into process_line
