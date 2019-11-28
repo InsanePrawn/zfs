@@ -139,3 +139,7 @@ ZFS_INITRD_POST_MODPROBE_SLEEP='0'
 
 # Create systemd dependencies on all canmount=auto datasets for local-fs.target
 ZFS_SYSTEMD_REQUIRE_MOUNTS='yes'
+
+# Create systemd mount units for datasets marked canmount=noauto
+ZFS_SYSTEMD_NOAUTO_UNITS='no'
+
