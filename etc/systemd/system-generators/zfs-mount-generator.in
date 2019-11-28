@@ -22,6 +22,11 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 # WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+CONFIGFILE="@sysconfdir@/default/zfs"
+if [ -f "$CONFIGFILE" ] && [ -r "$CONFIGFILE" ] ; then
+  . "$CONFIGFILE"
+fi
+
 set -e
 
 FSLIST="@sysconfdir@/zfs/zfs-list.cache"
