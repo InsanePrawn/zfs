@@ -235,9 +235,9 @@ EOF
     return
   fi
 
-  if [ "${p_canmount}" = "on" ] || \
-  ([ "${p_canmount}" = "noauto" ] &&
-  [ "$ZFS_SYSTEMD_NOAUTO_UNITS" = 'yes' ]) ; then
+  if [ "${p_canmount}" = "on" ] ||
+     ([ "${p_canmount}" = "noauto" ] &&
+      [ "$ZFS_SYSTEMD_NOAUTO_UNITS" = 'yes' ]) ; then
     # Create the .mount unit file.
     # By ordering before zfs-mount.service, we avoid race conditions.
     cat > "${dest_norm}/${mountfile}" << EOF
@@ -259,8 +259,8 @@ EOF
 
   fi
 
-  if [ "$ZFS_SYSTEMD_REQUIRE_MOUNTS" = "yes" ] &&\
-  [ "${p_canmount}" = "on" ] ; then
+  if [ "$ZFS_SYSTEMD_REQUIRE_MOUNTS" = "yes" ] &&
+     [ "${p_canmount}" = "on" ] ; then
     # Finally, create the appropriate dependency
     ln -s "../${mountfile}" "${req_dir}"
   fi
