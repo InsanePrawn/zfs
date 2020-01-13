@@ -46,9 +46,14 @@ case "${ZEVENT_HISTORY_INTERNAL_NAME}" in
     set|inherit)
         # Only act if one of the tracked properties is altered.
         case "${ZEVENT_HISTORY_INTERNAL_STR%%=*}" in
-            canmount|mountpoint|atime|relatime|devices|exec| \
-                readonly|setuid|nbmand|encroot|keylocation| \
-                org.open-zfs.systemd:noauto) ;;
+            canmount|mountpoint|atime|relatime|devices|exec|readonly| \
+              setuid|nbmand|encroot|keylocation| \
+              org.open-zfs.systemd:noauto|org.open-zfs.systemd:requires| \
+              org.open-zfs.systemd:requires-mounts-for| \
+              org.open-zfs.systemd:before|org.open-zfs.systemd:after| \
+              org.open-zfs.systemd:wanted-by|org.open-zfs.systemd:nofail| \
+              org.open-zfs.systemd:ignore \
+            ) ;;
             *) exit 0 ;;
         esac
       ;;
@@ -62,8 +67,12 @@ esac
 zed_lock zfs-list
 trap abort_alter EXIT
 
-PROPS="name,mountpoint,canmount,atime,relatime,devices,exec,readonly"
-PROPS="${PROPS},setuid,nbmand,encroot,keylocation,org.open-zfs.systemd:noauto"
+PROPS="name,mountpoint,canmount,atime,relatime,devices,exec,readonly\
+,setuid,nbmand,encroot,keylocation,org.open-zfs.systemd:noauto\
+,org.open-zfs.systemd:requires,org.open-zfs.systemd:requires-mounts-for\
+,org.open-zfs.systemd:before,org.open-zfs.systemd:after\
+,org.open-zfs.systemd:wanted-by,org.open-zfs.systemd:nofail\
+,org.open-zfs.systemd:ignore"
 
 "${ZFS}" list -H -t filesystem -o $PROPS -r "${ZEVENT_POOL}" > "${FSLIST_TMP}"
 

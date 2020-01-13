@@ -1,4 +1,11 @@
-.TH "ZFS\-MOUNT\-GENERATOR" "8" "ZFS" "zfs-mount-generator" "\""
+.\"
+.\" Copyright 2018 Antonio Russo <antonio.e.russo@gmail.com>
+.\" Copyright 2019 Kjeld Schouten-Lebbing <kjeld@schouten-lebbing.nl>
+.\" Copyright 2020 InsanePrawn <insane.prawny@gmail.com>
+.\"
+
+.TH "ZFS\-MOUNT\-GENERATOR" "8" "2020-01-14" "ZFS" "zfs-mount-generator" "\""
+
 .SH "NAME"
 zfs\-mount\-generator \- generates systemd mount units for ZFS
 .SH SYNOPSIS
@@ -12,10 +19,19 @@ and is called during early boot to generate
 .BR systemd.mount (5)
 units for automatically mounted datasets. Mount ordering and dependencies
 are created for all tracked pools (see below). If a dataset has
-.BR canmount=on
-and
 .BR mountpoint
-set, the
+set and
+.BR canmount
+is either
+.BR on
+or
+.BR noauto ,
+a mount unit will be generated.
+If
+.BR canmount
+is
+.BR on ,
+the
 .BR auto
 mount option will be set, and a dependency for
 .BR local-fs.target
@@ -26,7 +42,8 @@ information on ZFS mountpoints must be stored separately. The output
 of the command
 .PP
 .RS 4
-zfs list -H -o name,mountpoint,canmount,atime,relatime,devices,exec,readonly,setuid,nbmand,encroot,keylocation
+zfs list -H -o name,mountpoint,canmount,atime,relatime,devices,exec,readonly,setuid,nbmand,encroot,keylocation,org.open-zfs.systemd:noauto,org.open-zfs.systemd:requires,org.open-zfs.systemd:requires-mounts-for,org.open-zfs.systemd:before,org.open-zfs.systemd:after,org.open-zfs.systemd:wanted-by,org.open-zfs.systemd:nofail,org.open-zfs.systemd:ignore
+
 .RE
 .PP
 for datasets that should be mounted by systemd, should be kept
@@ -45,6 +62,49 @@ history_event-zfs-list-cacher.sh .
 .RE
 .PP
 .sp
+.SS PROPERTIES
+The behavior of the generator script can be influenced by setting special properties on datasets:
+.sp
+.TP 4
+.BR org.open\-zfs.systemd:noauto
+Create and treat the mount unit as if it had
+.BR canmount=noauto
+set.
+.TP 4
+.BR org.open\-zfs.systemd:requires\-mounts\-for
+Space\-separated list of mountpoints to require to be mounted by this mount unit
+.TP 4
+.BR org.open\-zfs.systemd:before
+Space\-separated list of units to order after this mount unit
+.TP 4
+.BR org.open\-zfs.systemd:after
+Space\-separated list of units to order before this mount unit
+.TP 4
+.BR org.open\-zfs.systemd:wanted\-by
+Unit to add a dependency for this mount unit to.
+Defaults to
+.BR local\-fs.target
+if unset.
+Setting this property to
+.BR none
+will result in similar behavior to
+.BR noauto .
+.TP 4
+.BR org.open\-zfs.systemd:nofail
+Toggles between a
+.BR wants
+and
+.BR requires
+type of dependency between the
+.TP 4
+.BR org.open\-zfs.systemd:ignore
+Do not generate a mount unit for this dataset.
+
+.RE
+See also
+.BR systemd.mount (5)
+
+.PP
 .SH EXAMPLE
 To begin, enable tracking for the pool:
 .PP
@@ -63,7 +123,9 @@ systemctl enable zfs-zed.service
 systemctl restart zfs-zed.service
 .RE
 .PP
-Force the running of the ZEDLET by setting canmount=on for at least one dataset in the pool:
+Force the running of the ZEDLET by setting a monitored property, e.g.
+.BR canmount
+for at least one dataset in the pool:
 .PP
 .RS 4
 zfs set canmount=on
