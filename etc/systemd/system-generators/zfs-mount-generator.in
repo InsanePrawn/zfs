@@ -2,6 +2,7 @@
 
 # zfs-mount-generator - generates systemd mount units for zfs
 # Copyright (c) 2017 Antonio Russo <antonio.e.russo@gmail.com>
+# Copyright (c) 2020 InsanePrawn <insane.prawny@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining
 # a copy of this software and associated documentation files (the
@@ -56,11 +57,6 @@ else
   do_fail "zero or three arguments required"
 fi
 
-# For datasets marked "auto", a dependency is created for local-fs.target. To
-# avoid regressions, this dependency is reduced to "wants" rather than
-# "requires". **THIS MAY CHANGE**
-wants_dir="${dest_norm}/local-fs.target.wants/"
-mkdir -p "${wants_dir}"
 
 # All needed information about each ZFS is available from
 # zfs list -H -t filesystem -o <properties>
@@ -89,18 +85,77 @@ process_line() {
   p_encroot="${11}"
   p_keyloc="${12}"
   p_systemd_noauto="${13}"
+  p_systemd_requires="${14}"
+  p_systemd_requiresmountsfor="${15}"
+  p_systemd_before="${16}"
+  p_systemd_after="${17}"
+  p_systemd_wantedby="${18}"
+  p_systemd_nofail="${19}"
+  p_systemd_ignore="${20}"
 
   # Minimal pre-requisites to mount a ZFS dataset
+  wantedby="local-fs.target"
+  after="zfs-import.target"
+  before="zfs-mount.service"
   wants="zfs-import.target"
+  requires=""
+  requiredmounts=""
 
+  if [ -n "${p_systemd_wantedby}" ] && \
+      [ "${p_systemd_wantedby}" != "-" ] ; then
+    if [ "${p_systemd_wantedby}" = "none" ] ; then
+      p_systemd_noauto="on"
+      wantedby=""
+    else
+      wantedby="${p_systemd_wantedby}"
+    fi
+  fi
+
+  if [ -n "${p_systemd_after}" ] && \
+      [ "${p_systemd_after}" != "-" ] ; then
+    after="${p_systemd_after} ${after}"
+  fi
+
+  if [ -n "${p_systemd_before}" ] && \
+      [ "${p_systemd_before}" != "-" ] ; then
+    echo "before activated! ${p_systemd_before}!"
+    before="${p_systemd_before} ${before}"
+  fi
+
+  if [ -n "${p_systemd_requires}" ] && \
+      [ "${p_systemd_requires}" != "-" ] ; then
+    requires="Requires=${p_systemd_requires}"
+  fi
+
+  if [ -n "${p_systemd_requiresmountsfor}" ] && \
+      [ "${p_systemd_requiresmountsfor}" != "-" ] ; then
+    requiredmounts="RequiresMountsFor=${p_systemd_requiresmountsfor}"
+  fi
+
+  # For datasets marked "auto", a dependency is created for $wantedby
+  # (local-fs.target by default). To avoid regressions, this dependency
+  # is reduced to "wants" rather than "requires" when nofail is not "off".
+  # **THIS MAY CHANGE**
+  if [ -n "${wantedby}" ] ; then
+    if [ "${p_systemd_nofail}" = "on" ] ; then
+      wants_dir="${dest_norm}/${wantedby}.requires/"
+    else
+      if [ "${p_systemd_nofail}" != "off" ] \
+        && [ "${p_systemd_nofail}" != "-" ] ; then
+          do_fail "invalid org.open-zfs.systemd:nofail for ${dataset}"
+      fi
+      wants_dir="${dest_norm}/${wantedby}.wants/"
+    fi
+    mkdir -p "${wants_dir}"
+  fi
   # Handle encryption
   if [ -n "${p_encroot}" ] &&
       [ "${p_encroot}" != "-" ] ; then
     keyloadunit="zfs-load-key-$(systemd-escape "${p_encroot}").service"
     if [ "${p_encroot}" = "${dataset}" ] ; then
-        pathdep=""
+      keymountdep=""
       if [ "${p_keyloc%%://*}" = "file" ] ; then
-        pathdep="RequiresMountsFor='${p_keyloc#file://}'"
+        keymountdep="RequiresMountsFor='${p_keyloc#file://}'"
         keyloadcmd="@sbindir@/zfs load-key '${dataset}'"
       elif [ "${p_keyloc}" = "prompt" ] ; then
         keyloadcmd="\
@@ -136,8 +191,8 @@ SourcePath=${cachefile}
 Documentation=man:zfs-mount-generator(8)
 DefaultDependencies=no
 Wants=${wants}
-After=${wants}
-${pathdep}
+After=${after}
+${keymountdep}
 
 [Service]
 Type=oneshot
@@ -148,9 +203,22 @@ ExecStop=@sbindir@/zfs unload-key '${dataset}'"   > "${dest_norm}/${keyloadunit}
     # Update the dependencies for the mount file to require the
     # key-loading unit.
     wants="${wants} ${keyloadunit}"
+    after="${after} ${keyloadunit}"
   fi
 
   # Prepare the .mount unit
+
+  # skip generation of the mount unit if org.open-zfs.sytemd:ignore is "on"
+  if [ -n "${p_systemd_ignore}" ] ; then
+    if [ "${p_systemd_ignore}" = "on" ] ; then
+      return
+    elif [ "${p_systemd_ignore}" = "-" ] \
+      || [ "${p_systemd_ignore}" = "off" ] ; then
+      : # This is OK
+    else
+      do_fail "invalid org.open-zfs.systemd:ignore for ${dataset}"
+    fi
+  fi
 
   # Check for canmount=off .
   if [ "${p_canmount}" = "off" ] ; then
@@ -158,7 +226,7 @@ ExecStop=@sbindir@/zfs unload-key '${dataset}'"   > "${dest_norm}/${keyloadunit}
   elif [ "${p_canmount}" = "noauto" ] || [ "${p_canmount}" = "on" ] ; then
     : # This is OK
   else
-    do_fail "invalid canmount"
+    do_fail "invalid canmount for ${dataset}"
   fi
 
   # Check for legacy and blank mountpoints.
@@ -167,7 +235,7 @@ ExecStop=@sbindir@/zfs unload-key '${dataset}'"   > "${dest_norm}/${keyloadunit}
   elif [ "${p_mountpoint}" = "none" ] ; then
     return
   elif [ "${p_mountpoint%"${p_mountpoint#?}"}" != "/" ] ; then
-    do_fail "invalid mountpoint $*"
+    do_fail "invalid mountpoint for ${dataset}"
   fi
 
   # Escape the mountpoint per systemd policy.
@@ -292,9 +360,9 @@ ExecStop=@sbindir@/zfs unload-key '${dataset}'"   > "${dest_norm}/${keyloadunit}
   #
   # (Do not use `<<EOF`-style here-documents for this, see warning above)
   #
-  before="zfs-mount.service"
-  if [ "${p_canmount}" = "on" ] && [ "${p_systemd_noauto}" != "on" ] ; then
-    before="${before} local-fs.target"
+  if [ "${p_canmount}" = "on" ] && [ "${p_systemd_noauto}" != "on" ] && \
+      [ "${p_systemd_nofail}" != "on" ] && [ -n "${wantedby}" ] ; then
+    before="${before} ${wantedby}"
   fi
   echo \
 "# Automatically generated by zfs-mount-generator
@@ -304,8 +372,10 @@ SourcePath=${cachefile}
 Documentation=man:zfs-mount-generator(8)
 
 Before=${before}
-After=${wants}
+After=${after}
 Wants=${wants}
+${requires}
+${requiredmounts}
 
 [Mount]
 Where=${p_mountpoint}
@@ -314,7 +384,8 @@ Type=zfs
 Options=defaults${opts},zfsutil" > "${dest_norm}/${mountfile}"
 
   # Finally, create the appropriate dependency
-  if [ "${p_canmount}" = "on" ] && [ "${p_systemd_noauto}" != "on" ] ; then
+  if [ -n "${wantedby}" ] && [ "${p_canmount}" = "on" ] && \
+      [ "${p_systemd_noauto}" != "on" ] ; then
     ln -s "../${mountfile}" "${wants_dir}"
   fi
 }
