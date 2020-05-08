@@ -551,7 +551,7 @@ dsl_scan_init(dsl_pool_t *dp, uint64_t txg)
 				scn->scn_restart_txg = txg;
 				zfs_dbgmsg("resilver can't excise DTL_MISSING "
 				    "when finished; restarting in txg %llu",
-				    (longlong_t)scn->scn_restart_txg);
+				    (u_longlong_t)scn->scn_restart_txg);
 			} else {
 				/* it's safe to excise DTL when finished */
 				spa->spa_scrub_started = B_TRUE;
