@@ -3965,13 +3965,11 @@ zfs_setup_cmdline_props(libzfs_handle_t *hdl, zfs_type_t type,
 		 */
 		if (!zfs_prop_valid_for_type(prop, type, B_FALSE) &&
 		    !zfs_prop_user(name)) {
-			if (recursive)
-				continue;
-			zfs_error_aux(hdl, dgettext(TEXT_DOMAIN,
-			    "property '%s' does not apply to datasets of this "
-			    "type"), name);
-			ret = zfs_error(hdl, EZFS_BADPROP, errbuf);
-			goto error;
+			(void) fprintf(stderr, dgettext(TEXT_DOMAIN,
+			    "Warning: %s: property '%s' does not "
+			    "apply to datasets of this type\n"),
+			    fsname, name);
+			continue;
 		}
 
 		/* raw streams can't override encryption properties */
